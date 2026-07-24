@@ -23,6 +23,7 @@ Historical reconstruction, historically informed generation, and contemporary ar
 - Independent port and starboard generation
 - 2D Compose, Split, and 3D Preview workspaces
 - Four built-in vessel studies
+- Bundled Giulio Cesare dreadnought and self-portrait GLB studies
 - Local GLB import with automatic axis detection
 - UV-independent, surface-normal-aware port/starboard/deck mapping
 - Generated poster vessels with 20 hulls, 10 gun configurations, 13 mast rigs, and 20 optional fittings
@@ -33,6 +34,16 @@ Historical reconstruction, historically informed generation, and contemporary ar
 - Halftone, gradient, noise, sea, periscope, and value-check treatments
 - PNG, SVG, 3D still, and JSON recipe exports
 - Responsive touch interface with a 2D fallback when WebGL is unavailable
+
+## Bundled 3D studies
+
+The Studio viewport and Poster Press UV Mesh Studio include three ready-to-use surfaces:
+
+- **Generated hull** — the procedural period-vessel study with a live Dazzle field.
+- **Giulio Cesare** — the supplied fast-dreadnought GLB, normalized and remapped with a side-aware planar/normal projection.
+- **Self portrait** — the supplied textured GLB. Its embedded albedo, metal/roughness, and normal maps are preserved in the 3D viewport, with an optional live Dazzle surface. Poster Press exposes the same geometry as a rotatable UV mesh.
+
+The separately supplied portrait albedo and metal/roughness images are already embedded byte-for-byte in the self-portrait GLB, so the app uses the embedded maps rather than shipping duplicate copies.
 
 ## Run locally
 
@@ -75,7 +86,8 @@ app/
   dazzle-expansion.tsx    Poster Press, Archive Room, Field Notes, and GLB tools
   globals.css             Interface and responsive styling
   layout.tsx              App metadata and document shell
-public/          Static assets
+public/
+  models/                 Bundled GLB model studies
 tests/           Rendered-output checks
 ```
 
