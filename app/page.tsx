@@ -34,6 +34,8 @@ type WorkspaceView = "compose" | "split" | "ship";
 type PlanMode = "elevation" | "field";
 type TreatmentMode = "archive" | "expanded";
 type VesselClass = "merchant" | "destroyer" | "battlecruiser" | "carrier";
+type StudioModel = "generated" | "dreadnought" | "portrait";
+type PortraitSurface = "portrait" | "dazzle";
 type PatternFamily =
   | "broadside"
   | "splinter"
@@ -242,6 +244,34 @@ const VESSEL_INFO: Record<
     note: "Early flush-deck carrier proportions derived from a converted liner hull.",
   },
 };
+
+const MODEL_LIBRARY: Record<
+  StudioModel,
+  {
+    label: string;
+    note: string;
+    path?: string;
+  }
+> = {
+  generated: {
+    label: "Dazzle ship study",
+    note: "Generated period vessel with a live Dazzle UV field.",
+  },
+  dreadnought: {
+    label: "Giulio Cesare",
+    note: "Fast dreadnought with a new side-aware Dazzle projection.",
+    path: "models/giulio-cesare-dreadnought.glb",
+  },
+  portrait: {
+    label: "Self portrait",
+    note: "Embedded portrait PBR texture or live Dazzle projection.",
+    path: "models/self-portrait.glb",
+  },
+};
+
+function publicAssetUrl(path: string) {
+  return new URL(`./${path}`, window.location.href).toString();
+}
 
 const FAMILY_INFO: Record<
   PatternFamily,
@@ -1652,6 +1682,173 @@ function buildVesselStudy(
   return group;
 }
 
+function disposeModel(model: THREE.Object3D) {
+  model.traverse((object) => {
+    const mesh = object as THREE.Mesh;
+    if (!mesh.isMesh) return;
+    mesh.geometry?.dispose();
+    const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+    materials.forEach((material) => material?.dispose());
+  });
+}
+
+function buildMappedGlbModel(
+  THREE: ThreeModule,
+  source: THREE.Group,
+  portTexture: THREE.CanvasTexture,
+  starboardTexture: THREE.CanvasTexture,
+  options: {
+    axes?: { length: number; vertical: number; side: number };
+    preserveMaterials?: boolean;
+    portrait?: boolean;
+  } = {},
+) {
+  source.updateMatrixWorld(true);
+  const meshes: Array<{ geometry: THREE.BufferGeometry; material: THREE.Material | THREE.Material[] }> = [];
+  source.traverse((object: THREE.Object3D) => {
+    if (!(object instanceof THREE.Mesh) || !object.geometry) return;
+    const geometry = object.geometry.clone();
+    geometry.applyMatrix4(object.matrixWorld);
+    if (!geometry.attributes.normal) geometry.computeVertexNormals();
+    geometry.computeBoundingBox();
+    meshes.push({
+      geometry,
+      material: Array.isArray(object.material)
+        ? object.material.map((material) => material.clone())
+        : object.material.clone(),
+    });
+  });
+  if (!meshes.length) throw new Error("No mesh geometry found");
+
+  const bounds = new THREE.Box3();
+  meshes.forEach(({ geometry }) => {
+    if (geometry.boundingBox) bounds.union(geometry.boundingBox);
+  });
+  const size = bounds.getSize(new THREE.Vector3());
+  const dimensions = [size.x, size.y, size.z];
+  const inferredLength = dimensions.indexOf(Math.max(...dimensions));
+  const inferredSide = dimensions.indexOf(Math.min(...dimensions));
+  const inferredVertical =
+    [0, 1, 2].find((index) => index !== inferredLength && index !== inferredSide) ?? 1;
+  const lengthIndex = options.axes?.length ?? inferredLength;
+  const verticalIndex = options.axes?.vertical ?? inferredVertical;
+  const sideIndex = options.axes?.side ?? inferredSide;
+  const unitAxes = [
+    new THREE.Vector3(1, 0, 0),
+    new THREE.Vector3(0, 1, 0),
+    new THREE.Vector3(0, 0, 1),
+  ];
+  const lengthAxis = unitAxes[lengthIndex].clone();
+  const verticalAxis = unitAxes[verticalIndex].clone();
+  const sideAxis = options.axes
+    ? unitAxes[sideIndex].clone()
+    : new THREE.Vector3().crossVectors(lengthAxis, verticalAxis).normalize();
+  const corners = [
+    new THREE.Vector3(bounds.min.x, bounds.min.y, bounds.min.z),
+    new THREE.Vector3(bounds.min.x, bounds.min.y, bounds.max.z),
+    new THREE.Vector3(bounds.min.x, bounds.max.y, bounds.min.z),
+    new THREE.Vector3(bounds.min.x, bounds.max.y, bounds.max.z),
+    new THREE.Vector3(bounds.max.x, bounds.min.y, bounds.min.z),
+    new THREE.Vector3(bounds.max.x, bounds.min.y, bounds.max.z),
+    new THREE.Vector3(bounds.max.x, bounds.max.y, bounds.min.z),
+    new THREE.Vector3(bounds.max.x, bounds.max.y, bounds.max.z),
+  ];
+  const axisRange = (axis: THREE.Vector3) => {
+    const values = corners.map((corner) => corner.dot(axis));
+    return [Math.min(...values), Math.max(...values)] as const;
+  };
+  const [lengthMin, lengthMax] = axisRange(lengthAxis);
+  const [verticalMin, verticalMax] = axisRange(verticalAxis);
+
+  const mappedMaterial = new THREE.ShaderMaterial({
+    uniforms: {
+      uPort: { value: portTexture },
+      uStarboard: { value: starboardTexture },
+      uLengthAxis: { value: lengthAxis },
+      uVerticalAxis: { value: verticalAxis },
+      uSideAxis: { value: sideAxis },
+      uLengthMin: { value: lengthMin },
+      uLengthMax: { value: lengthMax },
+      uVerticalMin: { value: verticalMin },
+      uVerticalMax: { value: verticalMax },
+    },
+    vertexShader: `
+      varying vec3 vObjectPosition;
+      varying vec3 vObjectNormal;
+      void main() {
+        vObjectPosition = position;
+        vObjectNormal = normalize(normal);
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: `
+      uniform sampler2D uPort;
+      uniform sampler2D uStarboard;
+      uniform vec3 uLengthAxis;
+      uniform vec3 uVerticalAxis;
+      uniform vec3 uSideAxis;
+      uniform float uLengthMin;
+      uniform float uLengthMax;
+      uniform float uVerticalMin;
+      uniform float uVerticalMax;
+      varying vec3 vObjectPosition;
+      varying vec3 vObjectNormal;
+      void main() {
+        float u = clamp(
+          (dot(vObjectPosition, uLengthAxis) - uLengthMin) /
+          max(.0001, uLengthMax - uLengthMin),
+          0.0,
+          1.0
+        );
+        float v = clamp(
+          (dot(vObjectPosition, uVerticalAxis) - uVerticalMin) /
+          max(.0001, uVerticalMax - uVerticalMin),
+          0.0,
+          1.0
+        );
+        vec3 normal = normalize(vObjectNormal);
+        float facing = dot(normal, uSideAxis);
+        float sideWeight = smoothstep(.18, .56, abs(facing));
+        vec3 portPaint = texture2D(uPort, vec2(u, v)).rgb;
+        vec3 starboardPaint = texture2D(uStarboard, vec2(u, v)).rgb;
+        vec3 dazzle = facing >= 0.0 ? portPaint : starboardPaint;
+        vec3 deck = vec3(.25, .27, .24);
+        vec3 color = mix(deck, dazzle, sideWeight);
+        float light = .64 + max(0.0, dot(normal, normalize(vec3(-.3, .8, .5)))) * .36;
+        gl_FragColor = vec4(color * light, 1.0);
+      }
+    `,
+    side: THREE.DoubleSide,
+  });
+
+  const baked = new THREE.Group();
+  meshes.forEach(({ geometry, material }) => {
+    baked.add(
+      new THREE.Mesh(
+        geometry,
+        options.preserveMaterials ? material : mappedMaterial,
+      ),
+    );
+    if (!options.preserveMaterials) {
+      const originals = Array.isArray(material) ? material : [material];
+      originals.forEach((item) => item.dispose());
+    }
+  });
+  const center = bounds.getCenter(new THREE.Vector3());
+  baked.position.copy(center).multiplyScalar(-1);
+
+  const normalized = new THREE.Group();
+  normalized.add(baked);
+  const basis = new THREE.Matrix4().makeBasis(lengthAxis, verticalAxis, sideAxis);
+  normalized.quaternion.setFromRotationMatrix(basis).invert();
+  const normalizationSpan = options.portrait
+    ? Math.max(0.001, verticalMax - verticalMin)
+    : Math.max(0.001, lengthMax - lengthMin);
+  normalized.scale.setScalar((options.portrait ? 4.8 : 10) / normalizationSpan);
+  normalized.position.y = options.portrait ? 1.9 : -0.06;
+  return normalized;
+}
+
 const ShipCanvas = forwardRef<
   ExportHandle,
   { spec: DazzleSpec; portDocument: PatternDocument; starboardDocument: PatternDocument }
@@ -1675,6 +1872,8 @@ const ShipCanvas = forwardRef<
   const specRef = useRef(spec);
   const portDocumentRef = useRef(portDocument);
   const starboardDocumentRef = useRef(starboardDocument);
+  const [activeModel, setActiveModel] = useState<StudioModel>("generated");
+  const [portraitSurface, setPortraitSurface] = useState<PortraitSurface>("portrait");
   const [modelStatus, setModelStatus] = useState("Built-in study · mapped UV field");
 
   useEffect(() => {
@@ -1702,7 +1901,7 @@ const ShipCanvas = forwardRef<
       loadThree(),
       import("three/examples/jsm/controls/OrbitControls.js"),
     ])
-      .then(([THREE, { OrbitControls }]) => {
+      .then(async ([THREE, { OrbitControls }]) => {
         if (cancelled) return;
         threeRef.current = THREE;
 
@@ -1774,13 +1973,53 @@ const ShipCanvas = forwardRef<
       side: THREE.DoubleSide,
     });
 
-    const ship = buildVesselStudy(
-      THREE,
-      specRef.current.vessel,
-      portMaterial,
-      starboardMaterial,
-      deckMaterial,
-    );
+    cleanup = () => {
+      controls.dispose();
+      portTexture.dispose();
+      starboardTexture.dispose();
+      portMaterial.dispose();
+      starboardMaterial.dispose();
+      deckMaterial.dispose();
+      renderer.dispose();
+      threeRef.current = null;
+    };
+
+    let ship: THREE.Group;
+    if (activeModel === "generated") {
+      ship = buildVesselStudy(
+        THREE,
+        specRef.current.vessel,
+        portMaterial,
+        starboardMaterial,
+        deckMaterial,
+      );
+      setModelStatus(`${VESSEL_INFO[specRef.current.vessel].label} · live Dazzle UV field`);
+    } else {
+      const modelInfo = MODEL_LIBRARY[activeModel];
+      setModelStatus(`Loading ${modelInfo.label}…`);
+      const { GLTFLoader } = await import("three/examples/jsm/loaders/GLTFLoader.js");
+      const loader = new GLTFLoader();
+      const gltf = await loader.loadAsync(publicAssetUrl(modelInfo.path!));
+      if (cancelled) {
+        disposeModel(gltf.scene);
+        return;
+      }
+      const showPortraitMaterial = activeModel === "portrait" && portraitSurface === "portrait";
+      ship = buildMappedGlbModel(THREE, gltf.scene, portTexture, starboardTexture, {
+        axes: activeModel === "portrait" ? { length: 0, vertical: 1, side: 2 } : undefined,
+        portrait: activeModel === "portrait",
+        preserveMaterials: showPortraitMaterial,
+      });
+      disposeModel(gltf.scene);
+      portMaterial.dispose();
+      starboardMaterial.dispose();
+      deckMaterial.dispose();
+      setModelStatus(
+        `${modelInfo.label} · ${
+          showPortraitMaterial ? "embedded portrait PBR" : "live Dazzle UV projection"
+        }`,
+      );
+    }
     shipRef.current = ship;
     scene.add(ship);
 
@@ -1925,11 +2164,7 @@ const ShipCanvas = forwardRef<
       cancelled = true;
       cleanup?.();
     };
-  }, [spec.vessel]);
-
-  useEffect(() => {
-    setModelStatus(`${VESSEL_INFO[spec.vessel].label} · mapped UV field`);
-  }, [spec.vessel]);
+  }, [activeModel, portraitSurface, spec.vessel]);
 
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
@@ -1995,138 +2230,20 @@ const ShipCanvas = forwardRef<
       const gltf = await new Promise<{ scene: THREE.Group }>(
         (resolve, reject) => loader.parse(arrayBuffer, "", resolve, reject),
       );
-      gltf.scene.updateMatrixWorld(true);
-
-      const geometries: THREE.BufferGeometry[] = [];
-      gltf.scene.traverse((object: THREE.Object3D) => {
-        if (!(object instanceof THREE.Mesh) || !object.geometry) return;
-        const geometry = object.geometry.clone();
-        geometry.applyMatrix4(object.matrixWorld);
-        if (!geometry.attributes.normal) geometry.computeVertexNormals();
-        geometry.computeBoundingBox();
-        geometries.push(geometry);
-      });
-      if (!geometries.length) throw new Error("No mesh geometry found");
-
-      const bounds = new THREE.Box3();
-      geometries.forEach((geometry) => {
-        if (geometry.boundingBox) bounds.union(geometry.boundingBox);
-      });
-      const size = bounds.getSize(new THREE.Vector3());
-      const dimensions = [size.x, size.y, size.z];
-      const lengthIndex = dimensions.indexOf(Math.max(...dimensions));
-      const sideIndex = dimensions.indexOf(Math.min(...dimensions));
-      const verticalIndex = [0, 1, 2].find(
-        (index) => index !== lengthIndex && index !== sideIndex,
-      ) ?? 1;
-      const unitAxes = [
-        new THREE.Vector3(1, 0, 0),
-        new THREE.Vector3(0, 1, 0),
-        new THREE.Vector3(0, 0, 1),
-      ];
-      const lengthAxis = unitAxes[lengthIndex].clone();
-      const verticalAxis = unitAxes[verticalIndex].clone();
-      const sideAxis = new THREE.Vector3().crossVectors(lengthAxis, verticalAxis).normalize();
-      const corners = [
-        new THREE.Vector3(bounds.min.x, bounds.min.y, bounds.min.z),
-        new THREE.Vector3(bounds.min.x, bounds.min.y, bounds.max.z),
-        new THREE.Vector3(bounds.min.x, bounds.max.y, bounds.min.z),
-        new THREE.Vector3(bounds.min.x, bounds.max.y, bounds.max.z),
-        new THREE.Vector3(bounds.max.x, bounds.min.y, bounds.min.z),
-        new THREE.Vector3(bounds.max.x, bounds.min.y, bounds.max.z),
-        new THREE.Vector3(bounds.max.x, bounds.max.y, bounds.min.z),
-        new THREE.Vector3(bounds.max.x, bounds.max.y, bounds.max.z),
-      ];
-      const axisRange = (axis: THREE.Vector3) => {
-        const values = corners.map((corner) => corner.dot(axis));
-        return [Math.min(...values), Math.max(...values)] as const;
-      };
-      const [lengthMin, lengthMax] = axisRange(lengthAxis);
-      const [verticalMin, verticalMax] = axisRange(verticalAxis);
-
-      const mappedMaterial = new THREE.ShaderMaterial({
-        uniforms: {
-          uPort: { value: portTexture },
-          uStarboard: { value: starboardTexture },
-          uLengthAxis: { value: lengthAxis },
-          uVerticalAxis: { value: verticalAxis },
-          uSideAxis: { value: sideAxis },
-          uLengthMin: { value: lengthMin },
-          uLengthMax: { value: lengthMax },
-          uVerticalMin: { value: verticalMin },
-          uVerticalMax: { value: verticalMax },
-        },
-        vertexShader: `
-          varying vec3 vObjectPosition;
-          varying vec3 vObjectNormal;
-          void main() {
-            vObjectPosition = position;
-            vObjectNormal = normalize(normal);
-            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-          }
-        `,
-        fragmentShader: `
-          uniform sampler2D uPort;
-          uniform sampler2D uStarboard;
-          uniform vec3 uLengthAxis;
-          uniform vec3 uVerticalAxis;
-          uniform vec3 uSideAxis;
-          uniform float uLengthMin;
-          uniform float uLengthMax;
-          uniform float uVerticalMin;
-          uniform float uVerticalMax;
-          varying vec3 vObjectPosition;
-          varying vec3 vObjectNormal;
-          void main() {
-            float u = clamp(
-              (dot(vObjectPosition, uLengthAxis) - uLengthMin) /
-              max(.0001, uLengthMax - uLengthMin),
-              0.0,
-              1.0
-            );
-            float v = clamp(
-              (dot(vObjectPosition, uVerticalAxis) - uVerticalMin) /
-              max(.0001, uVerticalMax - uVerticalMin),
-              0.0,
-              1.0
-            );
-            vec3 normal = normalize(vObjectNormal);
-            float facing = dot(normal, uSideAxis);
-            float sideWeight = smoothstep(.22, .62, abs(facing));
-            vec3 portPaint = texture2D(uPort, vec2(u, v)).rgb;
-            vec3 starboardPaint = texture2D(uStarboard, vec2(u, v)).rgb;
-            vec3 dazzle = facing >= 0.0 ? portPaint : starboardPaint;
-            vec3 deck = vec3(.25, .27, .24);
-            vec3 color = mix(deck, dazzle, sideWeight);
-            float light = .64 + max(0.0, dot(normal, normalize(vec3(-.3, .8, .5)))) * .36;
-            gl_FragColor = vec4(color * light, 1.0);
-          }
-        `,
-        side: THREE.DoubleSide,
-      });
-
-      const baked = new THREE.Group();
-      geometries.forEach((geometry) => baked.add(new THREE.Mesh(geometry, mappedMaterial)));
-      const center = bounds.getCenter(new THREE.Vector3());
-      baked.position.copy(center).multiplyScalar(-1);
-
-      const normalized = new THREE.Group();
-      normalized.add(baked);
-      const basis = new THREE.Matrix4().makeBasis(lengthAxis, verticalAxis, sideAxis);
-      normalized.quaternion.setFromRotationMatrix(basis).invert();
-      normalized.scale.setScalar(10 / Math.max(0.001, lengthMax - lengthMin));
+      const normalized = buildMappedGlbModel(
+        THREE,
+        gltf.scene,
+        portTexture,
+        starboardTexture,
+      );
+      disposeModel(gltf.scene);
       normalized.position.y = -0.06;
       normalized.rotation.y = specRef.current.side === "port" ? -0.2 : Math.PI + 0.2;
 
       const previous = shipRef.current;
       if (previous) {
         scene.remove(previous);
-        previous.traverse((object) => {
-          if (!(object instanceof THREE.Mesh)) return;
-          object.geometry.dispose();
-          const materials = Array.isArray(object.material) ? object.material : [object.material];
-          materials.forEach((material) => material.dispose());
-        });
+        disposeModel(previous);
       }
       shipRef.current = normalized;
       scene.add(normalized);
@@ -2170,6 +2287,31 @@ const ShipCanvas = forwardRef<
       <canvas ref={canvasRef} aria-label="Interactive 3D model of a WWI merchant steamer" />
       {spec.environment === "periscope" && <div className="periscope-reticle" aria-hidden="true" />}
       <div className="model-intake">
+        <label>
+          <select
+            aria-label="3D model"
+            value={activeModel}
+            onChange={(event) => setActiveModel(event.target.value as StudioModel)}
+          >
+            {(Object.entries(MODEL_LIBRARY) as Array<
+              [StudioModel, (typeof MODEL_LIBRARY)[StudioModel]]
+            >).map(([id, model]) => (
+              <option value={id} key={id}>
+                {model.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        {activeModel === "portrait" && (
+          <button
+            className="surface-toggle"
+            onClick={() =>
+              setPortraitSurface((current) => (current === "portrait" ? "dazzle" : "portrait"))
+            }
+          >
+            {portraitSurface === "portrait" ? "Use Dazzle surface" : "Use portrait surface"}
+          </button>
+        )}
         <input
           ref={fileInputRef}
           type="file"
