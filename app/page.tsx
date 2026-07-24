@@ -11,6 +11,12 @@ import {
 } from "react";
 import type * as THREE from "three";
 import type { OrbitControls as OrbitControlsInstance } from "three/examples/jsm/controls/OrbitControls.js";
+import {
+  ArchiveRoom,
+  FieldNotes,
+  PosterPress,
+  type StudioSection,
+} from "./dazzle-expansion";
 
 type ThreeModule = typeof import("three");
 
@@ -27,6 +33,7 @@ type MobileView = "plan" | "ship";
 type WorkspaceView = "compose" | "split" | "ship";
 type PlanMode = "elevation" | "field";
 type TreatmentMode = "archive" | "expanded";
+type VesselClass = "merchant" | "destroyer" | "battlecruiser" | "carrier";
 type PatternFamily =
   | "broadside"
   | "splinter"
@@ -74,6 +81,7 @@ type DazzleSpec = {
   printTexture: number;
   autoRotate: boolean;
   environment: Environment;
+  vessel: VesselClass;
 };
 
 type PresetId = "type14" | "type17" | "type10" | "type11";
@@ -206,6 +214,33 @@ const DEFAULT_SPEC: DazzleSpec = {
   printTexture: 0,
   autoRotate: true,
   environment: "sea",
+  vessel: "merchant",
+};
+
+const VESSEL_INFO: Record<
+  VesselClass,
+  { label: string; era: string; note: string }
+> = {
+  merchant: {
+    label: "EFC merchant steamer",
+    era: "1917–1919",
+    note: "Emergency Fleet Corporation proportions with two holds and central machinery.",
+  },
+  destroyer: {
+    label: "V/W-type destroyer study",
+    era: "1917–1918",
+    note: "A low, narrow military silhouette with compact upperworks and gun positions.",
+  },
+  battlecruiser: {
+    label: "Admiral-class study",
+    era: "1916–1920",
+    note: "Long capital-ship proportions with large turrets and a high visual mass.",
+  },
+  carrier: {
+    label: "HMS Argus study",
+    era: "1918",
+    note: "Early flush-deck carrier proportions derived from a converted liner hull.",
+  },
 };
 
 const FAMILY_INFO: Record<
@@ -1523,12 +1558,107 @@ function buildMerchantSteamer(
   return group;
 }
 
+function addTurret(
+  THREE: ThreeModule,
+  group: THREE.Group,
+  x: number,
+  y: number,
+  scale: number,
+  material: THREE.Material,
+) {
+  const turret = new THREE.Group();
+  const base = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.34 * scale, 0.42 * scale, 0.22 * scale, 16),
+    material,
+  );
+  const house = new THREE.Mesh(
+    new THREE.BoxGeometry(0.66 * scale, 0.25 * scale, 0.58 * scale),
+    material,
+  );
+  house.position.y = 0.18 * scale;
+  [-0.12, 0.12].forEach((z) => {
+    const barrel = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.035 * scale, 0.045 * scale, 0.95 * scale, 8),
+      material,
+    );
+    barrel.rotation.z = Math.PI / 2;
+    barrel.position.set(0.48 * scale, 0.25 * scale, z * scale);
+    turret.add(barrel);
+  });
+  turret.add(base, house);
+  turret.position.set(x, y, 0);
+  group.add(turret);
+}
+
+function buildVesselStudy(
+  THREE: ThreeModule,
+  vessel: VesselClass,
+  portMaterial: THREE.MeshStandardMaterial,
+  starboardMaterial: THREE.MeshStandardMaterial,
+  deckMaterial: THREE.MeshStandardMaterial,
+) {
+  const group = buildMerchantSteamer(THREE, portMaterial, starboardMaterial, deckMaterial);
+  const gunMaterial = new THREE.MeshStandardMaterial({
+    color: 0x31362f,
+    roughness: 0.88,
+    metalness: 0.03,
+  });
+
+  if (vessel === "destroyer") {
+    group.scale.set(1.08, 0.72, 0.7);
+    group.position.y = -0.13;
+    addTurret(THREE, group, 3.6, 0.62, 0.62, gunMaterial);
+    addTurret(THREE, group, -3.75, 0.62, 0.58, gunMaterial);
+    [-0.52, 0.28].forEach((x) => {
+      const funnel = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.15, 0.19, 0.92, 14),
+        gunMaterial,
+      );
+      funnel.position.set(x, 1.45, 0);
+      funnel.rotation.z = -0.08;
+      group.add(funnel);
+    });
+  }
+
+  if (vessel === "battlecruiser") {
+    group.scale.set(1.24, 0.96, 1.15);
+    group.position.y = -0.07;
+    [-3.25, 2.55, 3.4].forEach((x, index) =>
+      addTurret(THREE, group, x, 0.63, index === 0 ? 0.86 : 0.78, gunMaterial),
+    );
+    const tower = new THREE.Mesh(new THREE.BoxGeometry(0.72, 1.22, 0.7), gunMaterial);
+    tower.position.set(0.9, 1.52, 0);
+    group.add(tower);
+  }
+
+  if (vessel === "carrier") {
+    group.scale.set(1.08, 0.82, 1.02);
+    group.position.y = -0.15;
+    const flightDeck = new THREE.Mesh(
+      new THREE.BoxGeometry(10.6, 0.16, 1.52),
+      new THREE.MeshStandardMaterial({
+        color: 0x353a34,
+        roughness: 0.96,
+        metalness: 0,
+      }),
+    );
+    flightDeck.position.set(0.15, 1.52, 0);
+    group.add(flightDeck);
+    const island = new THREE.Mesh(new THREE.BoxGeometry(0.76, 0.6, 0.44), gunMaterial);
+    island.position.set(1.2, 1.88, -0.54);
+    group.add(island);
+  }
+
+  return group;
+}
+
 const ShipCanvas = forwardRef<
   ExportHandle,
   { spec: DazzleSpec; portDocument: PatternDocument; starboardDocument: PatternDocument }
 >(function ShipCanvas({ spec, portDocument, starboardDocument }, ref) {
   const hostRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
@@ -1545,6 +1675,7 @@ const ShipCanvas = forwardRef<
   const specRef = useRef(spec);
   const portDocumentRef = useRef(portDocument);
   const starboardDocumentRef = useRef(starboardDocument);
+  const [modelStatus, setModelStatus] = useState("Built-in study · mapped UV field");
 
   useEffect(() => {
     specRef.current = spec;
@@ -1643,7 +1774,13 @@ const ShipCanvas = forwardRef<
       side: THREE.DoubleSide,
     });
 
-    const ship = buildMerchantSteamer(THREE, portMaterial, starboardMaterial, deckMaterial);
+    const ship = buildVesselStudy(
+      THREE,
+      specRef.current.vessel,
+      portMaterial,
+      starboardMaterial,
+      deckMaterial,
+    );
     shipRef.current = ship;
     scene.add(ship);
 
@@ -1788,7 +1925,11 @@ const ShipCanvas = forwardRef<
       cancelled = true;
       cleanup?.();
     };
-  }, []);
+  }, [spec.vessel]);
+
+  useEffect(() => {
+    setModelStatus(`${VESSEL_INFO[spec.vessel].label} · mapped UV field`);
+  }, [spec.vessel]);
 
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
@@ -1836,6 +1977,168 @@ const ShipCanvas = forwardRef<
     controls.target.set(0, 0.7, 0);
   }, [spec.environment, spec.side]);
 
+  const importGLB = useCallback(async (file?: File) => {
+    if (!file) return;
+    const THREE = threeRef.current;
+    const scene = sceneRef.current;
+    const portTexture = portTextureRef.current;
+    const starboardTexture = starboardTextureRef.current;
+    if (!THREE || !scene || !portTexture || !starboardTexture) {
+      setModelStatus("3D engine is still loading");
+      return;
+    }
+    setModelStatus("Reading geometry…");
+    try {
+      const { GLTFLoader } = await import("three/examples/jsm/loaders/GLTFLoader.js");
+      const loader = new GLTFLoader();
+      const arrayBuffer = await file.arrayBuffer();
+      const gltf = await new Promise<{ scene: THREE.Group }>(
+        (resolve, reject) => loader.parse(arrayBuffer, "", resolve, reject),
+      );
+      gltf.scene.updateMatrixWorld(true);
+
+      const geometries: THREE.BufferGeometry[] = [];
+      gltf.scene.traverse((object: THREE.Object3D) => {
+        if (!(object instanceof THREE.Mesh) || !object.geometry) return;
+        const geometry = object.geometry.clone();
+        geometry.applyMatrix4(object.matrixWorld);
+        if (!geometry.attributes.normal) geometry.computeVertexNormals();
+        geometry.computeBoundingBox();
+        geometries.push(geometry);
+      });
+      if (!geometries.length) throw new Error("No mesh geometry found");
+
+      const bounds = new THREE.Box3();
+      geometries.forEach((geometry) => {
+        if (geometry.boundingBox) bounds.union(geometry.boundingBox);
+      });
+      const size = bounds.getSize(new THREE.Vector3());
+      const dimensions = [size.x, size.y, size.z];
+      const lengthIndex = dimensions.indexOf(Math.max(...dimensions));
+      const sideIndex = dimensions.indexOf(Math.min(...dimensions));
+      const verticalIndex = [0, 1, 2].find(
+        (index) => index !== lengthIndex && index !== sideIndex,
+      ) ?? 1;
+      const unitAxes = [
+        new THREE.Vector3(1, 0, 0),
+        new THREE.Vector3(0, 1, 0),
+        new THREE.Vector3(0, 0, 1),
+      ];
+      const lengthAxis = unitAxes[lengthIndex].clone();
+      const verticalAxis = unitAxes[verticalIndex].clone();
+      const sideAxis = new THREE.Vector3().crossVectors(lengthAxis, verticalAxis).normalize();
+      const corners = [
+        new THREE.Vector3(bounds.min.x, bounds.min.y, bounds.min.z),
+        new THREE.Vector3(bounds.min.x, bounds.min.y, bounds.max.z),
+        new THREE.Vector3(bounds.min.x, bounds.max.y, bounds.min.z),
+        new THREE.Vector3(bounds.min.x, bounds.max.y, bounds.max.z),
+        new THREE.Vector3(bounds.max.x, bounds.min.y, bounds.min.z),
+        new THREE.Vector3(bounds.max.x, bounds.min.y, bounds.max.z),
+        new THREE.Vector3(bounds.max.x, bounds.max.y, bounds.min.z),
+        new THREE.Vector3(bounds.max.x, bounds.max.y, bounds.max.z),
+      ];
+      const axisRange = (axis: THREE.Vector3) => {
+        const values = corners.map((corner) => corner.dot(axis));
+        return [Math.min(...values), Math.max(...values)] as const;
+      };
+      const [lengthMin, lengthMax] = axisRange(lengthAxis);
+      const [verticalMin, verticalMax] = axisRange(verticalAxis);
+
+      const mappedMaterial = new THREE.ShaderMaterial({
+        uniforms: {
+          uPort: { value: portTexture },
+          uStarboard: { value: starboardTexture },
+          uLengthAxis: { value: lengthAxis },
+          uVerticalAxis: { value: verticalAxis },
+          uSideAxis: { value: sideAxis },
+          uLengthMin: { value: lengthMin },
+          uLengthMax: { value: lengthMax },
+          uVerticalMin: { value: verticalMin },
+          uVerticalMax: { value: verticalMax },
+        },
+        vertexShader: `
+          varying vec3 vObjectPosition;
+          varying vec3 vObjectNormal;
+          void main() {
+            vObjectPosition = position;
+            vObjectNormal = normalize(normal);
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+          }
+        `,
+        fragmentShader: `
+          uniform sampler2D uPort;
+          uniform sampler2D uStarboard;
+          uniform vec3 uLengthAxis;
+          uniform vec3 uVerticalAxis;
+          uniform vec3 uSideAxis;
+          uniform float uLengthMin;
+          uniform float uLengthMax;
+          uniform float uVerticalMin;
+          uniform float uVerticalMax;
+          varying vec3 vObjectPosition;
+          varying vec3 vObjectNormal;
+          void main() {
+            float u = clamp(
+              (dot(vObjectPosition, uLengthAxis) - uLengthMin) /
+              max(.0001, uLengthMax - uLengthMin),
+              0.0,
+              1.0
+            );
+            float v = clamp(
+              (dot(vObjectPosition, uVerticalAxis) - uVerticalMin) /
+              max(.0001, uVerticalMax - uVerticalMin),
+              0.0,
+              1.0
+            );
+            vec3 normal = normalize(vObjectNormal);
+            float facing = dot(normal, uSideAxis);
+            float sideWeight = smoothstep(.22, .62, abs(facing));
+            vec3 portPaint = texture2D(uPort, vec2(u, v)).rgb;
+            vec3 starboardPaint = texture2D(uStarboard, vec2(u, v)).rgb;
+            vec3 dazzle = facing >= 0.0 ? portPaint : starboardPaint;
+            vec3 deck = vec3(.25, .27, .24);
+            vec3 color = mix(deck, dazzle, sideWeight);
+            float light = .64 + max(0.0, dot(normal, normalize(vec3(-.3, .8, .5)))) * .36;
+            gl_FragColor = vec4(color * light, 1.0);
+          }
+        `,
+        side: THREE.DoubleSide,
+      });
+
+      const baked = new THREE.Group();
+      geometries.forEach((geometry) => baked.add(new THREE.Mesh(geometry, mappedMaterial)));
+      const center = bounds.getCenter(new THREE.Vector3());
+      baked.position.copy(center).multiplyScalar(-1);
+
+      const normalized = new THREE.Group();
+      normalized.add(baked);
+      const basis = new THREE.Matrix4().makeBasis(lengthAxis, verticalAxis, sideAxis);
+      normalized.quaternion.setFromRotationMatrix(basis).invert();
+      normalized.scale.setScalar(10 / Math.max(0.001, lengthMax - lengthMin));
+      normalized.position.y = -0.06;
+      normalized.rotation.y = specRef.current.side === "port" ? -0.2 : Math.PI + 0.2;
+
+      const previous = shipRef.current;
+      if (previous) {
+        scene.remove(previous);
+        previous.traverse((object) => {
+          if (!(object instanceof THREE.Mesh)) return;
+          object.geometry.dispose();
+          const materials = Array.isArray(object.material) ? object.material : [object.material];
+          materials.forEach((material) => material.dispose());
+        });
+      }
+      shipRef.current = normalized;
+      scene.add(normalized);
+      controlsRef.current?.target.set(0, 0.7, 0);
+      setModelStatus(`${file.name} · normals + axis projection active`);
+    } catch {
+      setModelStatus("Could not read this GLB");
+    } finally {
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  }, []);
+
   useImperativeHandle(
     ref,
     () => ({
@@ -1866,9 +2169,19 @@ const ShipCanvas = forwardRef<
     >
       <canvas ref={canvasRef} aria-label="Interactive 3D model of a WWI merchant steamer" />
       {spec.environment === "periscope" && <div className="periscope-reticle" aria-hidden="true" />}
+      <div className="model-intake">
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".glb,model/gltf-binary"
+          onChange={(event) => void importGLB(event.target.files?.[0])}
+        />
+        <button onClick={() => fileInputRef.current?.click()}>Import GLB</button>
+        <span>{modelStatus}</span>
+      </div>
       <div className="canvas-label">
-        <span>02 / Vessel study</span>
-        <span>Drag to orbit · GPU fallback ready</span>
+        <span>02 / {VESSEL_INFO[spec.vessel].label}</span>
+        <span>Drag to orbit · Surface-normal mapping</span>
       </div>
     </div>
   );
@@ -1979,6 +2292,7 @@ function newSeed() {
 
 export default function Home() {
   const [spec, setSpecRaw] = useState<DazzleSpec>(DEFAULT_SPEC);
+  const [section, setSection] = useState<StudioSection>("studio");
   const [mobileView, setMobileView] = useState<MobileView>("ship");
   const [workspaceView, setWorkspaceView] = useState<WorkspaceView>("split");
   const [planMode, setPlanMode] = useState<PlanMode>("elevation");
@@ -2096,6 +2410,25 @@ export default function Home() {
           </div>
         </div>
 
+        <nav className="section-nav" aria-label="Dazzle Studio sections">
+          {(
+            [
+              ["studio", "Studio"],
+              ["poster", "Poster Press"],
+              ["archive", "Archive Room"],
+              ["learn", "Field Notes"],
+            ] as Array<[StudioSection, string]>
+          ).map(([id, label]) => (
+            <button
+              key={id}
+              className={section === id ? "active" : ""}
+              onClick={() => setSection(id)}
+            >
+              {label}
+            </button>
+          ))}
+        </nav>
+
         <div className="topbar-tools">
           <div className="history-tools" aria-label="History controls">
             <button className="icon-button" onClick={undo} aria-label="Undo" title="Undo">
@@ -2120,7 +2453,11 @@ export default function Home() {
         </div>
       </header>
 
-      <div className={`workspace ${controlsOpen ? "" : "controls-collapsed"}`}>
+      <div
+        className={`workspace ${controlsOpen ? "" : "controls-collapsed"} ${
+          section === "studio" ? "" : "section-hidden"
+        }`}
+      >
         <aside
           className={`control-panel ${controlsOpen ? "is-open" : ""} ${mobileControlsOpen ? "mobile-open" : ""}`}
           aria-label="Generator controls"
@@ -2200,6 +2537,25 @@ export default function Home() {
               Starboard
             </button>
           </div>
+
+          <label className="field-control vessel-select">
+            <span>Vessel geometry</span>
+            <select
+              value={spec.vessel}
+              onChange={(event) => updateSpec({ vessel: event.target.value as VesselClass })}
+            >
+              {(Object.entries(VESSEL_INFO) as Array<
+                [VesselClass, (typeof VESSEL_INFO)[VesselClass]]
+              >).map(([id, item]) => (
+                <option value={id} key={id}>
+                  {item.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <p className="family-note">
+            {VESSEL_INFO[spec.vessel].era} · {VESSEL_INFO[spec.vessel].note}
+          </p>
 
           <div className="treatment-switch" role="group" aria-label="Historical treatment mode">
             <button
@@ -2664,39 +3020,70 @@ export default function Home() {
         </section>
       </div>
 
-      <nav className="mobile-actions" aria-label="Mobile actions">
-        <button onClick={() => updateSpec({ seed: newSeed() })}>
-          <Icon name="shuffle" />
-          New
-        </button>
-        <button
-          onClick={() => {
-            const next = mobileView === "plan" ? "ship" : "plan";
-            setMobileView(next);
-            setWorkspaceView(next === "plan" ? "compose" : "ship");
-          }}
-        >
-          {mobileView === "plan" ? "3D" : "2D"}
-        </button>
-        <button onClick={() => updateSpec({ side: spec.side === "port" ? "starboard" : "port" })}>
-          {spec.side === "port" ? "Port" : "Starboard"}
-        </button>
-        <button onClick={undo}>
-          <Icon name="undo" />
-          Undo
-        </button>
-        <button onClick={() => setMobileControlsOpen(true)}>Tune</button>
-      </nav>
+      {section === "poster" && (
+        <PosterPress
+          seed={spec.seed}
+          side={spec.side}
+          familyLabel={FAMILY_INFO[spec.family].label}
+          pattern={activeDocument}
+        />
+      )}
+      {section === "archive" && (
+        <ArchiveRoom
+          seed={spec.seed}
+          side={spec.side}
+          familyLabel={FAMILY_INFO[spec.family].label}
+          pattern={activeDocument}
+        />
+      )}
+      {section === "learn" && (
+        <FieldNotes
+          seed={spec.seed}
+          side={spec.side}
+          familyLabel={FAMILY_INFO[spec.family].label}
+          pattern={activeDocument}
+        />
+      )}
 
-      <div className="export-dock" aria-label="Export options">
-        <span>Output</span>
-        <button onClick={() => planRef.current?.exportPNG()}>
-          {planMode === "field" ? "Artwork PNG" : "Plan PNG"}
-        </button>
-        <button onClick={() => exportPlanSVG(spec, activeDocument)}>Vector SVG</button>
-        <button onClick={() => shipRef.current?.exportPNG()}>3D still</button>
-        <button onClick={exportJSON}>Recipe JSON</button>
-      </div>
+      {section === "studio" && (
+        <>
+          <nav className="mobile-actions" aria-label="Mobile actions">
+            <button onClick={() => updateSpec({ seed: newSeed() })}>
+              <Icon name="shuffle" />
+              New
+            </button>
+            <button
+              onClick={() => {
+                const next = mobileView === "plan" ? "ship" : "plan";
+                setMobileView(next);
+                setWorkspaceView(next === "plan" ? "compose" : "ship");
+              }}
+            >
+              {mobileView === "plan" ? "3D" : "2D"}
+            </button>
+            <button
+              onClick={() => updateSpec({ side: spec.side === "port" ? "starboard" : "port" })}
+            >
+              {spec.side === "port" ? "Port" : "Starboard"}
+            </button>
+            <button onClick={undo}>
+              <Icon name="undo" />
+              Undo
+            </button>
+            <button onClick={() => setMobileControlsOpen(true)}>Tune</button>
+          </nav>
+
+          <div className="export-dock" aria-label="Export options">
+            <span>Output</span>
+            <button onClick={() => planRef.current?.exportPNG()}>
+              {planMode === "field" ? "Artwork PNG" : "Plan PNG"}
+            </button>
+            <button onClick={() => exportPlanSVG(spec, activeDocument)}>Vector SVG</button>
+            <button onClick={() => shipRef.current?.exportPNG()}>3D still</button>
+            <button onClick={exportJSON}>Recipe JSON</button>
+          </div>
+        </>
+      )}
     </main>
   );
 }

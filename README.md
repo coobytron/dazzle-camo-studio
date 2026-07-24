@@ -1,34 +1,36 @@
 # Dazzle Camo Studio
 
-An interactive WebGL design instrument for building dazzle camouflage systems inspired by First World War ship painting.
+A historically grounded WebGL design instrument for creating, studying, mapping, and publishing First World War–inspired dazzle camouflage.
 
-[Open the live studio](https://dazzle-camo-studio.coobytron.chatgpt.site)
+[Open the GitHub Pages build](https://coobytron.github.io/dazzle-camo-studio/) · [Open the current studio](https://dazzle-camo-studio.coobytron.chatgpt.site)
 
 ## What it does
 
-Dazzle Camo Studio uses one deterministic pattern document to drive a flat 2D composition and a procedural 3D merchant steamer at the same time. Port and starboard schemes are generated independently, so the ship behaves like a vessel-specific camouflage study rather than a mirrored texture.
+Dazzle Camo Studio treats camouflage as a vessel-specific design system rather than a repeating “zebra” texture. One deterministic pattern document drives the flat artwork, the mapped 3D vessel, the learning tools, and the poster output. Port and starboard remain independent.
 
-The studio separates two visual approaches:
+The experience is organized into four connected rooms:
 
-- **Archive mode** keeps the work within period-informed geometric, tonal, and palette constraints.
-- **Expanded mode** unlocks contemporary halftone, gradient, noise, and print treatments.
+- **Studio** — linked 2D composition and 3D evaluation.
+- **Poster Press** — borderless typographic artifacts, raw pattern fields, generated ship silhouettes, and mesh-wrapped graphics.
+- **Archive Room** — searchable source records with provenance and rights notes.
+- **Field Notes** — interactive explanations of the visual-deception logic behind dazzle.
 
-This is an archive-informed creative study, not a reconstruction of one documented vessel. Historical dazzle was intended to confuse estimates of course, range, and speed—not to make ships invisible.
+Historical reconstruction, historically informed generation, and contemporary art are labeled separately. Dazzle was intended to confuse estimates of course, range, speed, bow, stern, and silhouette—not to make a ship invisible.
 
-## Features
+## Highlights
 
-- Dedicated **2D Compose**, **Split**, and **3D Preview** workspaces
-- Nine procedural pattern grammars
+- Nine deterministic procedural pattern grammars
 - Independent port and starboard generation
-- Deterministic seeds and controlled variation
-- Full-field artwork and ship-mask views
-- Archive-informed presets and palettes
-- Shape, density, scale, overlap, asymmetry, angularity, waterline, detail, and upperworks controls
-- Dot, line, and crosshatch halftone screens
-- Linear, radial, vignette, and noise gradient fields
-- Semantic layer toggles
-- Pan, zoom, orbit, and fit controls
-- Sea, periscope, and value-check viewing modes
+- 2D Compose, Split, and 3D Preview workspaces
+- Four built-in vessel studies
+- Local GLB import with automatic axis detection
+- UV-independent, surface-normal-aware port/starboard/deck mapping
+- Generated poster vessels with 20 hulls, 10 gun configurations, 13 mast rigs, and 20 optional fittings
+- Masked ship, raw field, and rotatable mesh-wrap poster treatments
+- Editable poster typography, formats, palettes, custom font loading, and PNG export
+- Silhouette-distance-field pattern spill
+- Archive-informed palettes, references, and confidence framing
+- Halftone, gradient, noise, sea, periscope, and value-check treatments
 - PNG, SVG, 3D still, and JSON recipe exports
 - Responsive touch interface with a 2D fallback when WebGL is unavailable
 
@@ -50,6 +52,12 @@ For a production build:
 npm run build
 ```
 
+For the static GitHub Pages build:
+
+```bash
+npm run build:pages
+```
+
 ## Tech
 
 - React 19
@@ -63,12 +71,15 @@ npm run build
 
 ```text
 app/
-  page.tsx       Generator, 2D renderer, Three.js scene, controls, and exports
-  globals.css    Interface and responsive styling
-  layout.tsx     App metadata and document shell
+  page.tsx                Core generator, renderer, controls, and exports
+  dazzle-expansion.tsx    Poster Press, Archive Room, Field Notes, and GLB tools
+  globals.css             Interface and responsive styling
+  layout.tsx              App metadata and document shell
 public/          Static assets
 tests/           Rendered-output checks
 ```
+
+The researched product and historical specification lives in [`DAZZLE_CAMO_STUDIO.md`](./DAZZLE_CAMO_STUDIO.md).
 
 ## Historical framing
 
