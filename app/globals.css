@@ -1396,6 +1396,32 @@ input[type="range"]::-webkit-slider-thumb {
   font-size: 9px;
 }
 
+.mesh-library {
+  display: grid;
+  grid-template-columns: 1fr minmax(150px, 1.4fr);
+  align-items: center;
+  margin-bottom: 8px;
+  border: 1px solid var(--rule);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 9px;
+  text-transform: uppercase;
+}
+
+.mesh-library > span {
+  padding: 0 9px;
+  color: var(--muted);
+}
+
+.mesh-library select {
+  min-height: 38px;
+  border: 0;
+  border-left: 1px solid var(--rule);
+  background: var(--paper-bright);
+  padding: 0 8px;
+  color: var(--ink);
+  font: inherit;
+}
+
 .mesh-upload {
   display: grid;
   min-height: 52px;
@@ -1494,6 +1520,26 @@ input[type="range"]::-webkit-slider-thumb {
   backdrop-filter: blur(8px);
 }
 
+.model-intake label {
+  display: flex;
+  min-height: 30px;
+  align-items: center;
+  border-right: 1px solid rgba(23, 25, 20, 0.25);
+}
+
+.model-intake select {
+  max-width: 150px;
+  min-height: 30px;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  padding: 0 24px 0 9px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 8px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
 .model-intake input {
   display: none;
 }
@@ -1509,6 +1555,10 @@ input[type="range"]::-webkit-slider-thumb {
   font-size: 8px;
   font-weight: 700;
   text-transform: uppercase;
+}
+
+.model-intake .surface-toggle {
+  background: #5f6f92;
 }
 
 .model-intake span {

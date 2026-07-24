@@ -85,6 +85,34 @@ type PosterMesh = {
   name: string;
   triangles: MeshTriangle[];
 };
+type MeshLibraryId = "procedural" | "dreadnought" | "portrait" | "custom";
+
+const MESH_LIBRARY: Record<
+  MeshLibraryId,
+  {
+    label: string;
+    path?: string;
+    axes?: { length: number; vertical: number; side: number };
+    projectUvs?: boolean;
+  }
+> = {
+  procedural: { label: "Generated hull UV" },
+  dreadnought: {
+    label: "Giulio Cesare UV",
+    path: "models/giulio-cesare-dreadnought.glb",
+    projectUvs: true,
+  },
+  portrait: {
+    label: "Self portrait UV",
+    path: "models/self-portrait.glb",
+    axes: { length: 0, vertical: 1, side: 2 },
+  },
+  custom: { label: "Local GLB" },
+};
+
+function publicAssetUrl(path: string) {
+  return new URL(`./${path}`, window.location.href).toString();
+}
 
 const TYPEFACES: Record<
   PosterTypeface,
@@ -700,13 +728,18 @@ function drawMeshField(
   context.restore();
 }
 
-async function loadPosterMesh(file: File): Promise<PosterMesh> {
+async function loadPosterMeshFromBuffer(
+  name: string,
+  arrayBuffer: ArrayBuffer,
+  axes?: { length: number; vertical: number; side: number },
+  projectUvs = false,
+): Promise<PosterMesh> {
   const Three = await import("three");
   const { GLTFLoader } = await import("three/examples/jsm/loaders/GLTFLoader.js");
   const loader = new GLTFLoader();
-  const gltf = await new Promise<{ scene: THREE.Group }>((resolve, reject) => {
-    void file.arrayBuffer().then((buffer) => loader.parse(buffer, "", resolve, reject), reject);
-  });
+  const gltf = await new Promise<{ scene: THREE.Group }>((resolve, reject) =>
+    loader.parse(arrayBuffer, "", resolve, reject),
+  );
   gltf.scene.updateMatrixWorld(true);
 
   const rawTriangles: Array<{
@@ -729,7 +762,7 @@ async function loadPosterMesh(file: File): Promise<PosterMesh> {
         bounds.expandByPoint(point);
         return [point.x, point.y, point.z] as MeshPoint;
       }) as [MeshPoint, MeshPoint, MeshPoint];
-      const uvs = uv
+      const uvs = uv && !projectUvs
         ? (indices.map((vertexIndex) => [uv.getX(vertexIndex), 1 - uv.getY(vertexIndex)] as MeshUv) as [MeshUv, MeshUv, MeshUv])
         : undefined;
       rawTriangles.push({ points, uvs });
@@ -743,9 +776,13 @@ async function loadPosterMesh(file: File): Promise<PosterMesh> {
   const center = bounds.getCenter(new Three.Vector3());
   const centers = [center.x, center.y, center.z];
   const dimensions = [size.x, size.y, size.z];
-  const lengthAxis = dimensions.indexOf(Math.max(...dimensions));
-  const sideAxis = dimensions.indexOf(Math.min(...dimensions));
-  const verticalAxis = [0, 1, 2].find((axis) => axis !== lengthAxis && axis !== sideAxis) ?? 1;
+  const inferredLength = dimensions.indexOf(Math.max(...dimensions));
+  const inferredSide = dimensions.indexOf(Math.min(...dimensions));
+  const inferredVertical =
+    [0, 1, 2].find((axis) => axis !== inferredLength && axis !== inferredSide) ?? 1;
+  const lengthAxis = axes?.length ?? inferredLength;
+  const sideAxis = axes?.side ?? inferredSide;
+  const verticalAxis = axes?.vertical ?? inferredVertical;
   const longest = Math.max(0.0001, dimensions[lengthAxis]);
   const stride = Math.max(1, Math.ceil(rawTriangles.length / 9000));
   const triangles = rawTriangles
@@ -764,7 +801,11 @@ async function loadPosterMesh(file: File): Promise<PosterMesh> {
         ] as MeshUv) as [MeshUv, MeshUv, MeshUv]);
       return { points, uvs };
     });
-  return { name: file.name, triangles };
+  return { name, triangles };
+}
+
+async function loadPosterMesh(file: File): Promise<PosterMesh> {
+  return loadPosterMeshFromBuffer(file.name, await file.arrayBuffer());
 }
 
 function renderPoster(
@@ -985,6 +1026,7 @@ export function PosterPress(props: SharedProps) {
     ],
   });
   const [loadedMesh, setLoadedMesh] = useState<PosterMesh | null>(null);
+  const [meshLibraryId, setMeshLibraryId] = useState<MeshLibraryId>("procedural");
   const [meshStatus, setMeshStatus] = useState("Procedural hull surface · UV projection active");
   const [meshTurn, setMeshTurn] = useState(-18);
   const [meshTilt, setMeshTilt] = useState(7);
@@ -1050,10 +1092,39 @@ export function PosterPress(props: SharedProps) {
     try {
       const nextMesh = await loadPosterMesh(file);
       setLoadedMesh(nextMesh);
+      setMeshLibraryId("custom");
       setMeshStatus(`${nextMesh.name} · ${nextMesh.triangles.length.toLocaleString()} projected faces`);
       setGraphicMode("mesh");
     } catch {
       setMeshStatus("Could not read this GLB · procedural hull remains active");
+    }
+  };
+
+  const loadLibraryMesh = async (id: MeshLibraryId) => {
+    setMeshLibraryId(id);
+    if (id === "custom") return;
+    if (id === "procedural") {
+      setLoadedMesh(null);
+      setMeshStatus("Procedural hull surface · UV projection active");
+      setGraphicMode("mesh");
+      return;
+    }
+    const item = MESH_LIBRARY[id];
+    setMeshStatus(`Loading ${item.label}…`);
+    try {
+      const response = await fetch(publicAssetUrl(item.path!));
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const nextMesh = await loadPosterMeshFromBuffer(
+        item.label,
+        await response.arrayBuffer(),
+        item.axes,
+        item.projectUvs,
+      );
+      setLoadedMesh(nextMesh);
+      setMeshStatus(`${nextMesh.name} · ${nextMesh.triangles.length.toLocaleString()} projected faces`);
+      setGraphicMode("mesh");
+    } catch {
+      setMeshStatus(`Could not load ${item.label} · procedural hull remains available`);
     }
   };
 
@@ -1067,6 +1138,7 @@ export function PosterPress(props: SharedProps) {
       fittings: shuffled.slice(0, count),
     });
     setLoadedMesh(null);
+    setMeshLibraryId("procedural");
   };
 
   const toggleFitting = (id: string) => {
@@ -1226,6 +1298,25 @@ export function PosterPress(props: SharedProps) {
               <summary>
                 UV mesh studio <span>GLB</span>
               </summary>
+              <label className="mesh-library">
+                <span>Mesh library</span>
+                <select
+                  value={meshLibraryId}
+                  onChange={(event) =>
+                    void loadLibraryMesh(event.target.value as MeshLibraryId)
+                  }
+                >
+                  {(Object.entries(MESH_LIBRARY) as Array<
+                    [MeshLibraryId, (typeof MESH_LIBRARY)[MeshLibraryId]]
+                  >)
+                    .filter(([id]) => id !== "custom" || meshLibraryId === "custom")
+                    .map(([id, item]) => (
+                      <option value={id} key={id}>
+                        {item.label}
+                      </option>
+                    ))}
+                </select>
+              </label>
               <label className="mesh-upload">
                 <span>Upload local GLB</span>
                 <input
