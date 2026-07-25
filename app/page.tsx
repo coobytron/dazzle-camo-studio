@@ -34,11 +34,7 @@ type WorkspaceView = "compose" | "split" | "ship";
 type PlanMode = "elevation" | "field";
 type TreatmentMode = "archive" | "expanded";
 type VesselClass = "merchant" | "destroyer" | "battlecruiser" | "carrier";
-<<<<<<< HEAD
 type StudioModel = "generated" | "dreadnought" | "alien" | "beta" | "portrait";
-=======
-type StudioModel = "generated" | "dreadnought" | "battleship" | "portrait";
->>>>>>> origin/main
 type PortraitSurface = "portrait" | "dazzle";
 type PatternFamily =
   | "broadside"
@@ -267,7 +263,6 @@ const MODEL_LIBRARY: Record<
     note: "Fast dreadnought with a new side-aware Dazzle projection.",
     path: "models/giulio-cesare-dreadnought.glb",
   },
-<<<<<<< HEAD
   alien: {
     label: "Alien Stinger",
     note: "Experimental battleship study with a generated longitudinal Dazzle projection.",
@@ -279,12 +274,6 @@ const MODEL_LIBRARY: Record<
     note: "High-detail battleship study with a generated longitudinal Dazzle projection.",
     path: "models/battleship-beta.glb",
     axes: { length: 2, vertical: 1, side: 0 },
-=======
-  battleship: {
-    label: "Battleship Beta",
-    note: "High-detail battleship study with a new side-aware Dazzle projection.",
-    path: "models/battleship-beta.glb",
->>>>>>> origin/main
   },
   portrait: {
     label: "Self portrait",
