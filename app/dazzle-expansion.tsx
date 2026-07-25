@@ -85,7 +85,12 @@ type PosterMesh = {
   name: string;
   triangles: MeshTriangle[];
 };
-type MeshLibraryId = "procedural" | "dreadnought" | "portrait" | "custom";
+type MeshLibraryId =
+  | "procedural"
+  | "dreadnought"
+  | "battleship"
+  | "portrait"
+  | "custom";
 
 const MESH_LIBRARY: Record<
   MeshLibraryId,
@@ -100,6 +105,11 @@ const MESH_LIBRARY: Record<
   dreadnought: {
     label: "Giulio Cesare UV",
     path: "models/giulio-cesare-dreadnought.glb",
+    projectUvs: true,
+  },
+  battleship: {
+    label: "Battleship Beta UV",
+    path: "models/battleship-beta.glb",
     projectUvs: true,
   },
   portrait: {

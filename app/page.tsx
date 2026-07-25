@@ -34,7 +34,7 @@ type WorkspaceView = "compose" | "split" | "ship";
 type PlanMode = "elevation" | "field";
 type TreatmentMode = "archive" | "expanded";
 type VesselClass = "merchant" | "destroyer" | "battlecruiser" | "carrier";
-type StudioModel = "generated" | "dreadnought" | "portrait";
+type StudioModel = "generated" | "dreadnought" | "battleship" | "portrait";
 type PortraitSurface = "portrait" | "dazzle";
 type PatternFamily =
   | "broadside"
@@ -261,6 +261,11 @@ const MODEL_LIBRARY: Record<
     label: "Giulio Cesare",
     note: "Fast dreadnought with a new side-aware Dazzle projection.",
     path: "models/giulio-cesare-dreadnought.glb",
+  },
+  battleship: {
+    label: "Battleship Beta",
+    note: "High-detail battleship study with a new side-aware Dazzle projection.",
+    path: "models/battleship-beta.glb",
   },
   portrait: {
     label: "Self portrait",
