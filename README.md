@@ -22,8 +22,8 @@ Historical reconstruction, historically informed generation, and contemporary ar
 - Nine deterministic procedural pattern grammars
 - Independent port and starboard generation
 - 2D Compose, Split, and 3D Preview workspaces
-- Four built-in vessel studies
-- Bundled Giulio Cesare, Battleship Beta, and self-portrait GLB studies
+- Four generated vessel classes
+- Bundled Giulio Cesare, Alien Stinger, Battleship Beta, and self-portrait GLB studies
 - Local GLB import with automatic axis detection
 - UV-independent, surface-normal-aware port/starboard/deck mapping
 - Generated poster vessels with 20 hulls, 10 gun configurations, 13 mast rigs, and 20 optional fittings
@@ -37,10 +37,11 @@ Historical reconstruction, historically informed generation, and contemporary ar
 
 ## Bundled 3D studies
 
-The Studio viewport and Poster Press UV Mesh Studio include four ready-to-use surfaces:
+The Studio viewport and Poster Press UV Mesh Studio include five ready-to-use surfaces:
 
 - **Generated hull** — the procedural period-vessel study with a live Dazzle field.
 - **Giulio Cesare** — the supplied fast-dreadnought GLB, normalized and remapped with a side-aware planar/normal projection.
+- **Alien Stinger** — the supplied experimental battleship GLB. Missing and fragmented source UVs are bypassed by a coherent longitudinal/vertical surface projection.
 - **Battleship Beta** — the supplied high-detail battleship GLB, rebuilt as a lightweight Dazzle surface with a side-aware planar/normal projection.
 - **Self portrait** — the supplied textured GLB. Its embedded albedo, metal/roughness, and normal maps are preserved in the 3D viewport, with an optional live Dazzle surface. Poster Press exposes the same geometry as a rotatable UV mesh.
 

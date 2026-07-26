@@ -34,7 +34,7 @@ type WorkspaceView = "compose" | "split" | "ship";
 type PlanMode = "elevation" | "field";
 type TreatmentMode = "archive" | "expanded";
 type VesselClass = "merchant" | "destroyer" | "battlecruiser" | "carrier";
-type StudioModel = "generated" | "dreadnought" | "battleship" | "portrait";
+type StudioModel = "generated" | "dreadnought" | "alien" | "beta" | "portrait";
 type PortraitSurface = "portrait" | "dazzle";
 type PatternFamily =
   | "broadside"
@@ -251,6 +251,7 @@ const MODEL_LIBRARY: Record<
     label: string;
     note: string;
     path?: string;
+    axes?: { length: number; vertical: number; side: number };
   }
 > = {
   generated: {
@@ -262,15 +263,23 @@ const MODEL_LIBRARY: Record<
     note: "Fast dreadnought with a new side-aware Dazzle projection.",
     path: "models/giulio-cesare-dreadnought.glb",
   },
-  battleship: {
+  alien: {
+    label: "Alien Stinger",
+    note: "Experimental battleship study with a generated longitudinal Dazzle projection.",
+    path: "models/alien-stinger-battleship.glb",
+    axes: { length: 2, vertical: 1, side: 0 },
+  },
+  beta: {
     label: "Battleship Beta",
-    note: "High-detail battleship study with a new side-aware Dazzle projection.",
+    note: "High-detail battleship study with a generated longitudinal Dazzle projection.",
     path: "models/battleship-beta.glb",
+    axes: { length: 2, vertical: 1, side: 0 },
   },
   portrait: {
     label: "Self portrait",
     note: "Embedded portrait PBR texture or live Dazzle projection.",
     path: "models/self-portrait.glb",
+    axes: { length: 0, vertical: 1, side: 2 },
   },
 };
 
@@ -2011,7 +2020,7 @@ const ShipCanvas = forwardRef<
       }
       const showPortraitMaterial = activeModel === "portrait" && portraitSurface === "portrait";
       ship = buildMappedGlbModel(THREE, gltf.scene, portTexture, starboardTexture, {
-        axes: activeModel === "portrait" ? { length: 0, vertical: 1, side: 2 } : undefined,
+        axes: modelInfo.axes,
         portrait: activeModel === "portrait",
         preserveMaterials: showPortraitMaterial,
       });

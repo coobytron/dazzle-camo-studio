@@ -88,7 +88,8 @@ type PosterMesh = {
 type MeshLibraryId =
   | "procedural"
   | "dreadnought"
-  | "battleship"
+  | "alien"
+  | "beta"
   | "portrait"
   | "custom";
 
@@ -107,9 +108,16 @@ const MESH_LIBRARY: Record<
     path: "models/giulio-cesare-dreadnought.glb",
     projectUvs: true,
   },
-  battleship: {
+  alien: {
+    label: "Alien Stinger UV",
+    path: "models/alien-stinger-battleship.glb",
+    axes: { length: 2, vertical: 1, side: 0 },
+    projectUvs: true,
+  },
+  beta: {
     label: "Battleship Beta UV",
     path: "models/battleship-beta.glb",
+    axes: { length: 2, vertical: 1, side: 0 },
     projectUvs: true,
   },
   portrait: {

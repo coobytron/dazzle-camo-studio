@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { access, readFile } from "node:fs/promises";
 import test from "node:test";
 
 const developmentPreviewMeta =
@@ -30,4 +31,27 @@ test("renders development preview metadata", async () => {
     /^text\/html\b/i,
   );
   assert.match(await response.text(), developmentPreviewMeta);
+});
+
+test("bundles every model exposed by the 3D libraries", async () => {
+  const modelPaths = [
+    "alien-stinger-battleship.glb",
+    "battleship-beta.glb",
+    "giulio-cesare-dreadnought.glb",
+    "self-portrait.glb",
+  ];
+  await Promise.all(
+    modelPaths.map((name) => access(new URL(`../public/models/${name}`, import.meta.url))),
+  );
+
+  const sources = await Promise.all([
+    readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/dazzle-expansion.tsx", import.meta.url), "utf8"),
+  ]);
+  for (const modelPath of modelPaths) {
+    assert.ok(
+      sources.every((source) => source.includes(`models/${modelPath}`)),
+      `${modelPath} must be available in both Studio and Poster Press`,
+    );
+  }
 });
